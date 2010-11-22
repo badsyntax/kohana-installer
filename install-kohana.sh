@@ -151,8 +151,16 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 	# success?
 	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
 
+	echo "   ~ Downloading .htaccess ... \c"
+	# get .htaccess
+	curl -o .htaccess \
+		https://github.com/kohana/kohana/raw/master/example.htaccess \
+		> /dev/null 2>&1
+	# success?
+	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
+
 	echo "   ~ Committing application structure ... \c"
-	git add index.php application \
+	git add .htaccess index.php application \
 		> /dev/null 2>&1
 	git commit -m "Basic application structure created" \
 		> /dev/null 2>&1
