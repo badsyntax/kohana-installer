@@ -138,7 +138,7 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 	echo "   ~ Downloading index.php ... \c"
 	# get index.php
 	curl -o index.php \
-		http://github.com/kohana/kohana/raw/master/index.php \
+		https://github.com/kohana/kohana/raw/master/index.php \
 		> /dev/null 2>&1
 	# success?
 	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
@@ -146,7 +146,7 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 	echo "   ~ Downloading bootstrap.php ... \c"
 	# get bootstrap.php
 	curl -o application/bootstrap.php \
-		http://github.com/kohana/kohana/raw/master/application/bootstrap.php \
+		https://github.com/kohana/kohana/raw/master/application/bootstrap.php \
 		> /dev/null 2>&1
 	# success?
 	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
