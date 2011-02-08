@@ -3,8 +3,18 @@
 # have submodules been added?
 MODS=0
 
+# Github base URL
+GITHUB="https://github.com"
+
+# Default branch
+DEFAULT_BRANCH="3.0/master"
+
 echo " "
-echo "This script will install the current development version of Kohana from Github. To use the latest stable release, run \"git submodule foreach 'git checkout master'\" after installation."
+echo "Kohana PHP Framework Installer"
+echo "http://kohanaframework.org/"
+echo " "
+echo "This script will create a Git repository and install Kohana into it."
+echo "You will be able to select the directory and branch you want to install."
 echo " "
 echo " > Continue installation? (Y/n): \c"
 read install
@@ -19,7 +29,7 @@ read dir
 
 if [[ -n $dir ]]; then
 	if [ ! -d $dir ]; then
-		echo "   ~ Creating directory ... \c"
+		echo "   ~ Creating directory: $dir ... \c"
 
 		# create directory
 		mkdir $dir > /dev/null 2>&1
@@ -39,37 +49,19 @@ fi
 if [[ ! -d ".git" ]]; then
 	echo "   ~ Creating git repository ... \c"
 	# create local repo
-	git init \
-		> /dev/null 2>&1
+	git init > /dev/null 2>&1
 	# success?
-	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
+	[[ $? == 0 ]] && echo "done." || echo "failed."
 fi
-
-# ! This fails because git returns an error status when using the default Github branch.
-# ! Some kind of work around will be required to handle the 3.0.x branch.
-
-# echo "What branch do you want to use? (master): \c"
-# read branch
-# 
-# if [[ $branch == "" ]]; then
-# 	# default to using stable branch
-# 	branch="master"
-# elif [[ $branch != "master" && $branch != "3.0.x" && $branch != "3.1.x" ]]; then
-# 	# invalid branch
-# 	echo " ! Invalid branch $branch."
-# 	exit 1
-# fi
 
 if [[ ! -d "system" ]]; then
 	echo "   ~ Installing system module ... \c"
 	# install core module
-	git submodule add git://github.com/kohana/core.git system \
-		> /dev/null 2>&1
+	git submodule add "$GITHUB/kohana/core.git" system > /dev/null 2>&1
 	# success?
 	if [[ $? == 0 ]]; then
+		[[ $MODS == 1 ]] || MODS=1 # new module installed
 		echo "done."
-		# new module added
-		MODS=1
 	else
 		echo "failed."
 	fi
@@ -90,13 +82,11 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 
 		echo "   ~ Installing $module ... \c"
 		# install module
-		git submodule add "git://github.com/kohana/$module.git" modules/$module \
-			> /dev/null 2>&1
+		git submodule add "$GITHUB/kohana/$module.git" "modules/$module" > /dev/null 2>&1
 		# success?
 		if [[ $? == 0 ]]; then
+			[[ $MODS == 1 ]] || MODS=1 # new module installed
 			echo "done."
-			# new module added
-			MODS=1
 		else
 			echo "failed."
 		fi
@@ -104,14 +94,42 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 fi
 
 if [[ $MODS == 1 ]]; then
+	while true; do
+		echo " > What branch do you want to use? ($DEFAULT_BRANCH): \c"
+		read BRANCH
+
+		if [[ $BRANCH == "" ]]; then
+			# default to using stable branch
+			BRANCH="$DEFAULT_BRANCH"
+		fi
+
+		# Check if the branch exists
+		status=$(curl --silent --head --write-out "%{http_code}" $GITHUB/kohana/kohana/raw/$BRANCH/index.php |tail -n 1)
+
+		if [[ $status != "200" ]]; then
+			echo "   ! Invalid branch $BRANCH."
+		else
+			echo "   ~ Selecting $BRANCH for all submodules ... \c"
+			# Update submodule branches
+			git submodule foreach "git fetch && git checkout $BRANCH > /dev/null 2>&1" > /dev/null 2>&1
+			# success?
+			if [[ $? == 0 ]]; then
+				[[ $MODS == 1 ]] || MODS=1 # new module installed
+				echo "done."
+			else
+				echo "failed."
+			fi
+			# Selected a valid branch
+			break
+		fi
+	done
+
 	echo "   ~ Committing submodules ... \c"
 	# initialize and commit modules
-	git submodule init \
-		> /dev/null 2>&1
-	git commit -m 'Modules installed' \
-		> /dev/null 2>&1
+	git submodule init > /dev/null 2>&1
+	git commit -m 'Modules installed' > /dev/null 2>&1
 	# success?
-	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
+	[[ $? == 0 ]] && echo "done." || echo "failed."
 fi
 
 echo " > Create application structure? [Y/n] \c"
@@ -137,50 +155,31 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 
 	echo "   ~ Downloading index.php ... \c"
 	# get index.php
-	curl -o index.php \
-		https://github.com/kohana/kohana/raw/master/index.php \
-		> /dev/null 2>&1
+	curl --output index.php "$GITHUB/kohana/kohana/raw/$BRANCH/index.php" > /dev/null 2>&1
 	# success?
-	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
+	[[ $? == 0 ]] && echo "done." || echo "failed."
 
 	echo "   ~ Downloading bootstrap.php ... \c"
 	# get bootstrap.php
-	curl -o application/bootstrap.php \
-		https://github.com/kohana/kohana/raw/master/application/bootstrap.php \
-		> /dev/null 2>&1
+	curl --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$BRANCH/application/bootstrap.php" > /dev/null 2>&1
 	# success?
-	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
+	[[ $? == 0 ]] && echo "done." || echo "failed."
 
 	echo "   ~ Downloading .htaccess ... \c"
 	# get .htaccess
-	curl -o .htaccess \
-		https://github.com/kohana/kohana/raw/master/example.htaccess \
-		> /dev/null 2>&1
+	curl --output .htaccess "$GITHUB/kohana/kohana/raw/$BRANCH/example.htaccess" > /dev/null 2>&1
 	# success?
-	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
+	[[ $? == 0 ]] && echo "done." || echo "failed."
 
 	echo "   ~ Committing application structure ... \c"
-	git add .htaccess index.php application \
-		> /dev/null 2>&1
-	git commit -m "Basic application structure created" \
-		> /dev/null 2>&1
+	git add .htaccess index.php application > /dev/null 2>&1
+	git commit -m "Basic application structure created" > /dev/null 2>&1
 	# success?
-	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
-fi
-
-echo " > Switch to stable release? (y/N): \c"
-read install
-
-if [[ $install == "Y" || $install == "y" ]]; then
-	echo "   ~ Switching to stable versions of modules ... \c"
-	git submodule foreach 'git checkout master' \
-		> /dev/null 2>&1
-	# success?
-	if [[ $? == 0 ]]; then echo "done."; else echo "failed."; fi
+	[[ $? == 0 ]] && echo "done." || echo "failed."
 fi
 
 # success!
-echo " ! Kohana has been installed. Enjoy!"
+echo " = Kohana has been installed."
 
 # fin
 exit 0
