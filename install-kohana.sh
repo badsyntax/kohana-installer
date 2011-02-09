@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # have submodules been added?
 MODS=0
