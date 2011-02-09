@@ -16,7 +16,7 @@ echo " "
 echo "This script will create a Git repository and install Kohana into it."
 echo "You will be able to select the directory and branch you want to install."
 echo " "
-echo " > Continue installation? (Y/n): \c"
+echo -n " > Continue installation? (Y/n): "
 read install
 
 if [[ $install == "N" ||  $install == "n" ]]; then
@@ -24,12 +24,12 @@ if [[ $install == "N" ||  $install == "n" ]]; then
 	exit 0
 fi
 
-echo " > Install to? (Directory name): \c"
+echo -n " > Install to? (Directory name): "
 read dir
 
 if [[ -n $dir ]]; then
 	if [ ! -d $dir ]; then
-		echo "   ~ Creating directory: $dir ... \c"
+		echo -n "   ~ Creating directory: $dir ... "
 
 		# create directory
 		mkdir $dir > /dev/null 2>&1
@@ -47,7 +47,7 @@ if [[ -n $dir ]]; then
 fi
 
 if [[ ! -d ".git" ]]; then
-	echo "   ~ Creating git repository ... \c"
+	echo -n "   ~ Creating git repository ... "
 	# create local repo
 	git init > /dev/null 2>&1
 	# success?
@@ -55,7 +55,7 @@ if [[ ! -d ".git" ]]; then
 fi
 
 if [[ ! -d "system" ]]; then
-	echo "   ~ Installing system module ... \c"
+	echo -n "   ~ Installing system module ... "
 	# install core module
 	git submodule add "$GITHUB/kohana/core.git" system > /dev/null 2>&1
 	# success?
@@ -67,12 +67,12 @@ if [[ ! -d "system" ]]; then
 	fi
 fi
 
-echo " > Do you want to install any modules? (Y/n): \c"
+echo -n " > Do you want to install any modules? (Y/n): "
 read install
 
 if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 	while [ 1 ]; do
-		echo " > Module name? (Blank to stop): \c"
+		echo -n " > Module name? (Blank to stop): "
 		read module
 
 		if [ -z "$module" ]; then
@@ -80,7 +80,7 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 			break
 		fi
 
-		echo "   ~ Installing $module ... \c"
+		echo -n "   ~ Installing $module ... "
 		# install module
 		git submodule add "$GITHUB/kohana/$module.git" "modules/$module" > /dev/null 2>&1
 		# success?
@@ -95,7 +95,7 @@ fi
 
 if [[ $MODS == 1 ]]; then
 	while true; do
-		echo " > What branch do you want to use? ($DEFAULT_BRANCH): \c"
+		echo -n " > What branch do you want to use? ($DEFAULT_BRANCH): "
 		read BRANCH
 
 		if [[ $BRANCH == "" ]]; then
@@ -109,7 +109,7 @@ if [[ $MODS == 1 ]]; then
 		if [[ $status != "200" ]]; then
 			echo "   ! Invalid branch $BRANCH."
 		else
-			echo "   ~ Selecting $BRANCH for all submodules ... \c"
+			echo -n "   ~ Selecting $BRANCH for all submodules ... "
 			# Update submodule branches
 			git submodule foreach "git fetch && git checkout $BRANCH > /dev/null 2>&1" > /dev/null 2>&1
 			# success?
@@ -124,7 +124,7 @@ if [[ $MODS == 1 ]]; then
 		fi
 	done
 
-	echo "   ~ Committing submodules ... \c"
+	echo -n "   ~ Committing submodules ... "
 	# initialize and commit modules
 	git submodule init > /dev/null 2>&1
 	git commit -m 'Modules installed' > /dev/null 2>&1
@@ -132,12 +132,12 @@ if [[ $MODS == 1 ]]; then
 	[[ $? == 0 ]] && echo "done." || echo "failed."
 fi
 
-echo " > Create application structure? [Y/n] \c"
+echo -n " > Create application structure? [Y/n] "
 read install
 
 if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 
-	echo "   ~ Creating structure ... \c"
+	echo -n "   ~ Creating structure ... "
 
 	# controllers and models
 	mkdir -p application/classes/{controller,model}
@@ -153,25 +153,25 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 	# structure created
 	echo "done."
 
-	echo "   ~ Downloading index.php ... \c"
+	echo -n "   ~ Downloading index.php ... "
 	# get index.php
 	curl --output index.php "$GITHUB/kohana/kohana/raw/$BRANCH/index.php" > /dev/null 2>&1
 	# success?
 	[[ $? == 0 ]] && echo "done." || echo "failed."
 
-	echo "   ~ Downloading bootstrap.php ... \c"
+	echo -n "   ~ Downloading bootstrap.php ... "
 	# get bootstrap.php
 	curl --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$BRANCH/application/bootstrap.php" > /dev/null 2>&1
 	# success?
 	[[ $? == 0 ]] && echo "done." || echo "failed."
 
-	echo "   ~ Downloading .htaccess ... \c"
+	echo -n "   ~ Downloading .htaccess ... "
 	# get .htaccess
 	curl --output .htaccess "$GITHUB/kohana/kohana/raw/$BRANCH/example.htaccess" > /dev/null 2>&1
 	# success?
 	[[ $? == 0 ]] && echo "done." || echo "failed."
 
-	echo "   ~ Committing application structure ... \c"
+	echo -n "   ~ Committing application structure ... "
 	git add .htaccess index.php application > /dev/null 2>&1
 	git commit -m "Basic application structure created" > /dev/null 2>&1
 	# success?
