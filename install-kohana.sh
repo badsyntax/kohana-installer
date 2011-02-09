@@ -88,6 +88,8 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 			[[ $MODS == 1 ]] || MODS=1 # new module installed
 			echo "done."
 		else
+			# git will create this dir even if repo doesn't exist
+			rm -r "modules/$module"
 			echo "failed."
 		fi
 	done
