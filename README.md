@@ -19,4 +19,5 @@ __If you don't know what `$PATH` is, [search Google](http://www.google.com/searc
 ## Usage
 
 1. Execute `kohana` to start a new installation.
-2. Profit.
+2. ???
+3. Profit.
