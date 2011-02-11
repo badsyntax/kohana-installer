@@ -80,9 +80,17 @@ if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
 			break
 		fi
 
-		echo -n "   ~ Installing $module ... "
+		if [[ $module != */* ]]; then
+			# A kohana module
+			module="kohana/$module"
+		fi
+
+		# module name
+		name=$(basename "$module")
+
+		echo -n "   ~ Installing $module to modules/$name ... "
 		# install module
-		git submodule add "$GITHUB/kohana/$module.git" "modules/$module" > /dev/null 2>&1
+		git submodule add "$GITHUB/$module.git" "modules/$name" > /dev/null 2>&1
 		# success?
 		if [[ $? == 0 ]]; then
 			[[ $MODS == 1 ]] || MODS=1 # new module installed
