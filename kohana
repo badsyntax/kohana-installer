@@ -1,197 +1,322 @@
 #!/bin/bash
 
-# have submodules been added?
-MODS=0
+#
+# General configuration
+#
+DEFAULT_BRANCH="3.1/master"
+INSTALL_SKELETON=1
+LOCAL_CONFIG="$HOME/.kohana.conf"
 
-# Github base URL
+# Load local configuration
+[ -f $LOCAL_CONFIG ] && . $LOCAL_CONFIG
+
+#
+# Defaults
+#
+VERSION="0.3.0"
 GITHUB="https://github.com"
+INSTALL_DIR="."
+MODULES=()
+LOGS=""
+VERBOSE=0
+DRY_RUN=0
 
-# Default branch
-DEFAULT_BRANCH="3.0/master"
+#
+# Exit error codes
+#
+ERROR_USAGE=2
+ERROR_MISSING_ARGUMENTS=3
+ERROR_GIT=4
 
-echo " "
-echo "Kohana PHP Framework Installer"
-echo "http://kohanaframework.org/"
-echo " "
-echo "This script will create a Git repository and install Kohana into it."
-echo "You will be able to select the directory and branch you want to install."
-echo " "
-echo -n " > Continue installation? (Y/n): "
-read install
+#
+# Functions
+#
+usage() {
+	echo "kohana <action> [<options>] [<directory>]"
+	exit $ERROR_USAGE
+}
 
-if [[ $install == "N" ||  $install == "n" ]]; then
-	# abort installation
-	exit 0
-fi
+usage_long() {
+less << EOF
+USAGE
+	kohana [<options>] [<directory>]
 
-echo -n " > Install to? (Directory name): "
-read dir
+DESCRIPTION
+	Kohana Framework Installer
 
-if [[ -n $dir ]]; then
-	if [ ! -d $dir ]; then
-		echo -n "   ~ Creating directory: $dir ... "
+DIRECTORY
+	If no directory is specified, the current directory will be used.
 
-		# create directory
-		mkdir $dir > /dev/null 2>&1
-		if [[ $? == 0 ]]; then
-			echo "done."
-		else
-			echo "failed."
-			echo " ! Could not create requested directory."
-			exit 1
+OPTIONS
+	-h, --help	Show this help
+	-s, --skeleton	Install skeleton files
+	-n, --no-skeleton	Do not install skeleton files
+	-b, --branch	Specify the branch to use
+	--version	Print current installer version
+
+EXAMPLES
+	. kohana -s -b 3.0/master
+	. kohana -s /www/apps/kohana
+
+VERSION
+	$VERSION
+EOF
+exit 0
+}
+
+# Checks if last comand was successful
+check_exit_status() {
+	if [ $? -ne 0 ]; then
+		print_error_and_die "$1, exiting..." $2
+	fi
+}
+
+# Simple log function
+write_log() {
+	if [ $VERBOSE -eq 1 ]; then
+		echo "$(date): $1"
+	else
+		LOGS=$LOGS"$(date): $1"
+	fi
+}
+
+# Simple error printer
+print_error_and_die() {
+	if [ $VERBOSE -eq 1 ]; then
+		echo "fatal: $1"
+	else
+		write_log "fatal: $1"
+	fi
+	exit $2
+}
+
+#
+# Action: install
+#
+action_install() {
+	create_install_dir
+	initialize_git
+	install_module "kohana/core" "system" || return 1
+	commit "Installed Kohana system"
+	prompt_modules
+	if [ $INSTALL_SKELETON -eq 1 ]; then
+		download_skeleton
+		stage_skeleton
+		commit "Basic application structure created"
+	fi
+}
+
+# Create installation directory
+create_install_dir() {
+	if [ ! -d "$INSTALL_DIR" ]; then
+		write_log "Creating installation directory $INSTALL_DIR"
+		if [ $DRY_RUN -eq 0 ]; then
+			mkdir "$INSTALL_DIR" > /dev/null 2>&1
+			check_exit_status "Could not create installation directory" 1
 		fi
 	fi
+	# Change to installation directory
+	[ -d "$INSTALL_DIR" ] && cd "$INSTALL_DIR"
+}
 
-	# use directory
-	cd $dir
-fi
-
-if [[ ! -d ".git" ]]; then
-	echo -n "   ~ Creating git repository ... "
-	# create local repo
-	git init > /dev/null 2>&1
-	# success?
-	[[ $? == 0 ]] && echo "done." || echo "failed."
-fi
-
-if [[ ! -d "system" ]]; then
-	echo -n "   ~ Installing system module ... "
-	# install core module
-	git submodule add "$GITHUB/kohana/core.git" system > /dev/null 2>&1
-	# success?
-	if [[ $? == 0 ]]; then
-		[[ $MODS == 1 ]] || MODS=1 # new module installed
-		echo "done."
-	else
-		echo "failed."
+# Initialize git directory
+initialize_git() {
+	if [ ! -d "$INSTALL_DIR/.git" ]; then
+		write_log "Initializing git repository in $INSTALL_DIR"
+		if [ $DRY_RUN -eq 0 ]; then
+			git init > /dev/null 2>&1
+			check_exit_status "Could not initialize git" $ERROR_GIT
+		fi
 	fi
-fi
+}
 
-echo -n " > Do you want to install any modules? (Y/n): "
-read install
+# Make a git commit
+commit() {
+	[ -z "$1" ] && print_error_and_die "Must provide a commit message" $ERROR_MISSING_ARGUMENTS
 
-if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
+	write_log "Creating commit: $1"
+
+	if [ $DRY_RUN -eq 0 ]; then
+		git commit -m "$1" > /dev/null 2>&1
+		check_exit_status "Commit failed" $ERROR_GIT
+	fi
+
+	return 0
+}
+
+# Install a module
+install_module() {
+	[ -z "$1" ] && print_error_and_die "Must provide a module name" $ERROR_MISSING_ARGUMENTS
+	[ -z "$2" ] && print_error_and_die "Must provide a module path" $ERROR_MISSING_ARGUMENTS
+
+	write_log "Installing $1 to $2"
+
+	branch="$DEFAULT_BRANCH"
 	while [ 1 ]; do
-		echo -n " > Module name? (Blank to stop): "
+		status=$(curl --silent --head --write-out "%{http_code}" $GITHUB/$1/tree/$branch |tail -n 1)
+		case "$status" in
+			301)
+				# Probably the default branch
+				opts=()
+				break
+				;;
+			200)
+				# Not the default branch
+				opts=(-b "$branch")
+				break
+				;;
+			*)
+				write_log "Branch $branch of $1 does not exist"
+				echo -n "What branch of $1 do you want to install? "
+				read branch
+				[ -z "$branch" ] && return 1
+				;;
+		esac
+	done
+
+	if [ $DRY_RUN -eq 0 ]; then
+		git submodule add "${opts[@]}" "$GITHUB/$1.git" "$2" > /dev/null 2>&1
+		check_exit_status "Failed to install submodule" $ERROR_GIT
+	fi
+
+	return 0
+}
+
+# Prompt for modules to install
+prompt_modules() {
+	while [ 1 ]; do
+		echo -n "What module would you like to install? "
 		read module
 
-		if [ -z "$module" ]; then
-			# stop asking for modules
-			break
-		fi
+		[ -z "$module" ] && break
+		case "$module" in
+			*/*)
+				# Do nothing, full path given
+				;;
+			*)
+				# Assume this a Kohana module
+				module="kohana/$module"
+				;;
+		esac
 
-		if [[ $module != */* ]]; then
-			# A kohana module
-			module="kohana/$module"
-		fi
-
-		# module name
-		name=$(basename "$module")
-
-		echo -n "   ~ Installing $module to modules/$name ... "
-		# install module
-		git submodule add "$GITHUB/$module.git" "modules/$name" > /dev/null 2>&1
-		# success?
-		if [[ $? == 0 ]]; then
-			[[ $MODS == 1 ]] || MODS=1 # new module installed
-			echo "done."
-		else
-			if [ -d "modules/$name" ]; then
-				# git will create this dir even if repo doesn't exist
-				rm -r "modules/$name" > /dev/null 2>&1
-			fi
-			echo "failed."
-		fi
-	done
-fi
-
-if [[ $MODS == 1 ]]; then
-	while true; do
-		echo -n " > What branch do you want to use? ($DEFAULT_BRANCH): "
-		read BRANCH
-
-		if [[ $BRANCH == "" ]]; then
-			# default to using stable branch
-			BRANCH="$DEFAULT_BRANCH"
-		fi
-
-		# Check if the branch exists
-		status=$(curl --silent --head --write-out "%{http_code}" $GITHUB/kohana/kohana/raw/$BRANCH/index.php |tail -n 1)
-
-		if [[ $status != "200" ]]; then
-			echo "   ! Invalid branch $BRANCH."
-		else
-			echo -n "   ~ Selecting $BRANCH for all submodules ... "
-			# Update submodule branches
-			git submodule foreach "git fetch && git checkout $BRANCH > /dev/null 2>&1" > /dev/null 2>&1
-			# success?
-			if [[ $? == 0 ]]; then
-				[[ $MODS == 1 ]] || MODS=1 # new module installed
-				echo "done."
-			else
-				echo "failed."
-			fi
-			# Selected a valid branch
-			break
-		fi
+		name=$(basename "$module" | tr '[:upper:]' '[:lower:]')
+		install_module "$module" "modules/$name"
+		commit "Installed $module to modules/$name"
 	done
 
-	echo -n "   ~ Committing submodules ... "
-	# initialize and commit modules
-	git submodule init > /dev/null 2>&1
-	git commit -m 'Modules installed' > /dev/null 2>&1
-	# success?
-	[[ $? == 0 ]] && echo "done." || echo "failed."
-fi
+	return 0
+}
 
-echo -n " > Create application structure? [Y/n] "
-read install
+# Download skeleton files
+download_skeleton() {
+	write_log "Creating application directories"
 
-if [[ $install == "" ||  $install == "Y" || $install == "y" ]]; then
+	if [ $DRY_RUN -eq 0 ]; then
+		# controllers and models
+		mkdir -p application/classes/{controller,model}
+		mkdir -p application/{config,views}
 
-	echo -n "   ~ Creating structure ... "
+		# cache and logs must be writable
+		mkdir -m 0777 -p application/{cache,logs}
 
-	# controllers and models
-	mkdir -p application/classes/{controller,model}
-	mkdir -p application/{config,views}
+		# ignore log and cache files
+		echo '[^.]*' > application/logs/.gitignore
+		echo '[^.]*' > application/cache/.gitignore
+	fi
 
-	# cache and logs must be writable
-	mkdir -m 0777 -p application/{cache,logs}
+	write_log "Downloading skeleton files"
 
-	# ignore log and cache files
-	echo '[^.]*' > application/logs/.gitignore
-	echo '[^.]*' > application/cache/.gitignore
+	if [ $DRY_RUN -eq 0 ]; then
+		# get index.php
+		curl --output index.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/index.php" > /dev/null 2>&1
+		check_exit_status "Failed to create skeleton: index.php" $ERROR_GIT
 
-	# structure created
-	echo "done."
+		# get bootstrap.php
+		curl --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/application/bootstrap.php" > /dev/null 2>&1
+		check_exit_status "Failed to create skeleton: application/bootstrap.php" $ERROR_GIT
 
-	echo -n "   ~ Downloading index.php ... "
-	# get index.php
-	curl --output index.php "$GITHUB/kohana/kohana/raw/$BRANCH/index.php" > /dev/null 2>&1
-	# success?
-	[[ $? == 0 ]] && echo "done." || echo "failed."
+		# get .htaccess
+		curl --output .htaccess "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/example.htaccess" > /dev/null 2>&1
+		check_exit_status "Failed to create skeleton: .htaccess" $ERROR_GIT
+	fi
 
-	echo -n "   ~ Downloading bootstrap.php ... "
-	# get bootstrap.php
-	curl --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$BRANCH/application/bootstrap.php" > /dev/null 2>&1
-	# success?
-	[[ $? == 0 ]] && echo "done." || echo "failed."
+	return 0
+}
 
-	echo -n "   ~ Downloading .htaccess ... "
-	# get .htaccess
-	curl --output .htaccess "$GITHUB/kohana/kohana/raw/$BRANCH/example.htaccess" > /dev/null 2>&1
-	# success?
-	[[ $? == 0 ]] && echo "done." || echo "failed."
+# Stage skeleton files to git index
+stage_skeleton() {
+	write_log "Staging skeleton files"
 
-	echo -n "   ~ Committing application structure ... "
-	git add .htaccess index.php application > /dev/null 2>&1
-	git commit -m "Basic application structure created" > /dev/null 2>&1
-	# success?
-	[[ $? == 0 ]] && echo "done." || echo "failed."
-fi
+	if [ $DRY_RUN -eq 0 ]; then
+		# Stage skeleton
+		git add .htaccess index.php application > /dev/null 2>&1
+	fi
 
-# success!
-echo " = Kohana has been installed."
+	return 0
+}
 
-# fin
-exit 0
+#
+# Handle execution
+#
+main() {
+	dir="'$INSTALL_DIR/'"
+	[ "$dir" = "." ] && dir="current directory"
+	echo -n "Install Kohana $DEFAULT_BRANCH to $dir? (Y/n) "
+	read response
+	case "$response" in
+		n*|N*)
+			echo "Install aborted."
+			exit 0
+			;;
+	esac
+	# Start installation
+	action_install
+	exit 0
+}
+
+# Parse parameters
+while test $# != 0; do
+	case "$1" in
+		-h|--help)
+			usage_long
+			;;
+		-s|--skeleton)
+			INSTALL_SKELETON=1
+			;;
+		-n|--no-skeleton)
+			INSTALL_SKELETON=0
+			;;
+		-b|--branch*)
+			case "$#,$1" in
+				*,*=*)
+					DEFAULT_BRANCH=$(expr "z$1" : 'z-[^=]*=\(.*\)')
+					;;
+				*)
+					if [ ! $(echo "$2" | egrep '^-' | wc -l) -eq 1 ]; then
+						DEFAULT_BRANCH="$2"
+						shift
+					else
+						print_error_and_die "Must specify a branch name with --branch" $ERROR_MISSING_ARGUMENTS
+					fi
+					;;
+			esac
+			;;
+		-v|--verbose)
+			VERBOSE=1
+			;;
+		-D|--dry-run)
+			DRY_RUN=1
+			write_log "Dry run, no actions will be taken"
+			;;
+		--version)
+			echo "kohana version $VERSION"
+			exit 0
+			;;
+		*)
+			# Pass through the directory name
+			[ -n "$1" ] && INSTALL_DIR="$1"
+			;;
+	esac
+	shift
+done
+main
