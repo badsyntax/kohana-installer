@@ -27,6 +27,7 @@ DRY_RUN=0
 ERROR_USAGE=2
 ERROR_MISSING_ARGUMENTS=3
 ERROR_GIT=4
+ERROR_CURL=5
 
 #
 # Functions
@@ -96,14 +97,9 @@ print_error_and_die() {
 action_install() {
 	create_install_dir
 	initialize_git
-	install_module "kohana/core" "system" || return 1
-	commit "Installed Kohana system"
+	install_system
 	prompt_modules
-	if [ $INSTALL_SKELETON -eq 1 ]; then
-		download_skeleton
-		stage_skeleton
-		commit "Basic application structure created"
-	fi
+	[ $INSTALL_SKELETON -eq 1 ] && install_application
 }
 
 # Create installation directory
@@ -130,18 +126,70 @@ initialize_git() {
 	fi
 }
 
+# Install Kohana system files
+install_system() {
+	if [ ! -d "$INSTALL_DIR/system" ]; then
+		write_log "Installing core system files to $INSTALL_DIR/system"
+		if [ $DRY_RUN -eq 0 ]; then
+			install_module "kohana/core" "system" || return 1
+			commit "Installed Kohana system"
+		fi
+	fi
+}
+
+# Install application skeleton files
+install_application() {
+	if [ ! -d "$INSTALL_DIR/application" ]; then
+		write_log "Creating application directories"
+
+		if [ $DRY_RUN -eq 0 ]; then
+			# controllers and models
+			mkdir -p application/classes/{controller,model}
+			mkdir -p application/{config,views}
+
+			# cache and logs must be writable
+			mkdir -m 0777 -p application/{cache,logs}
+
+			# ignore log and cache files
+			echo '[^.]*' > application/logs/.gitignore
+			echo '[^.]*' > application/cache/.gitignore
+		fi
+
+		write_log "Downloading skeleton files"
+
+		if [ $DRY_RUN -eq 0 ]; then
+			# get index.php
+			curl --output index.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/index.php" > /dev/null 2>&1
+			check_exit_status "Failed to create skeleton: index.php" $ERROR_CURL
+
+			# get bootstrap.php
+			curl --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/application/bootstrap.php" > /dev/null 2>&1
+			check_exit_status "Failed to create skeleton: application/bootstrap.php" $ERROR_CURL
+
+			# get .htaccess
+			curl --output .htaccess "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/example.htaccess" > /dev/null 2>&1
+			check_exit_status "Failed to create skeleton: .htaccess" $ERROR_CURL
+
+			# Stage skeleton
+			git add .htaccess index.php application > /dev/null 2>&1
+			check_exit_status "Failed to stage skeleton files" $ERROR_GIT
+		fi
+
+		commit "Application skeleton created"
+	fi
+}
+
+
 # Make a git commit
 commit() {
 	[ -z "$1" ] && print_error_and_die "Must provide a commit message" $ERROR_MISSING_ARGUMENTS
 
-	write_log "Creating commit: $1"
+	write_log "Committing: $1"
 
 	if [ $DRY_RUN -eq 0 ]; then
 		git commit -m "$1" > /dev/null 2>&1
 		check_exit_status "Commit failed" $ERROR_GIT
 	fi
-
-	return 0
 }
 
 # Install a module
@@ -153,7 +201,7 @@ install_module() {
 
 	branch="$DEFAULT_BRANCH"
 	while [ 1 ]; do
-		status=$(curl --silent --head --write-out "%{http_code}" $GITHUB/$1/tree/$branch |tail -n 1)
+		status=$(curl --silent --head --write-out "%{http_code}" $GITHUB/$1/tree/$branch | tail -n 1)
 		case "$status" in
 			301)
 				# Probably the default branch
@@ -169,17 +217,18 @@ install_module() {
 				write_log "Branch $branch of $1 does not exist"
 				echo -n "What branch of $1 do you want to install? "
 				read branch
-				[ -z "$branch" ] && return 1
+				if [ -z "$branch" ]; then
+					write_log "Skipping installation of $1, no suitable branch found"
+					break
+				fi
 				;;
 		esac
 	done
 
-	if [ $DRY_RUN -eq 0 ]; then
+	if [ $DRY_RUN -eq 0 ] && [ -n "$branch" ]; then
 		git submodule add "${opts[@]}" "$GITHUB/$1.git" "$2" > /dev/null 2>&1
 		check_exit_status "Failed to install submodule" $ERROR_GIT
 	fi
-
-	return 0
 }
 
 # Prompt for modules to install
@@ -189,6 +238,7 @@ prompt_modules() {
 		read module
 
 		[ -z "$module" ] && break
+
 		case "$module" in
 			*/*)
 				# Do nothing, full path given
@@ -203,56 +253,6 @@ prompt_modules() {
 		install_module "$module" "modules/$name"
 		commit "Installed $module to modules/$name"
 	done
-
-	return 0
-}
-
-# Download skeleton files
-download_skeleton() {
-	write_log "Creating application directories"
-
-	if [ $DRY_RUN -eq 0 ]; then
-		# controllers and models
-		mkdir -p application/classes/{controller,model}
-		mkdir -p application/{config,views}
-
-		# cache and logs must be writable
-		mkdir -m 0777 -p application/{cache,logs}
-
-		# ignore log and cache files
-		echo '[^.]*' > application/logs/.gitignore
-		echo '[^.]*' > application/cache/.gitignore
-	fi
-
-	write_log "Downloading skeleton files"
-
-	if [ $DRY_RUN -eq 0 ]; then
-		# get index.php
-		curl --output index.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/index.php" > /dev/null 2>&1
-		check_exit_status "Failed to create skeleton: index.php" $ERROR_GIT
-
-		# get bootstrap.php
-		curl --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/application/bootstrap.php" > /dev/null 2>&1
-		check_exit_status "Failed to create skeleton: application/bootstrap.php" $ERROR_GIT
-
-		# get .htaccess
-		curl --output .htaccess "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/example.htaccess" > /dev/null 2>&1
-		check_exit_status "Failed to create skeleton: .htaccess" $ERROR_GIT
-	fi
-
-	return 0
-}
-
-# Stage skeleton files to git index
-stage_skeleton() {
-	write_log "Staging skeleton files"
-
-	if [ $DRY_RUN -eq 0 ]; then
-		# Stage skeleton
-		git add .htaccess index.php application > /dev/null 2>&1
-	fi
-
-	return 0
 }
 
 #
