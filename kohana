@@ -259,8 +259,11 @@ stage_skeleton() {
 # Handle execution
 #
 main() {
-	dir="'$INSTALL_DIR/'"
-	[ "$dir" = "." ] && dir="current directory"
+	if [ "$INSTALL_DIR" = "." ]; then
+		dir="current directory"
+	else
+		dir="'$INSTALL_DIR/'"
+	fi
 	echo -n "Install Kohana $DEFAULT_BRANCH to $dir? (Y/n) "
 	read response
 	case "$response" in
