@@ -264,7 +264,27 @@ main() {
 	else
 		dir="'$INSTALL_DIR/'"
 	fi
-	echo -n "Install Kohana $DEFAULT_BRANCH to $dir? (Y/n) "
+	if [ -d "$INSTALL_DIR/system/.git" ]; then
+		action="Upgrade"
+		cd "$INSTALL_DIR/system" > /dev/null 2>&1
+		branch=$(git branch | egrep '^\*' | cut -d" " -f 2-)
+		cd - > /dev/null 2>&1
+		if [ "$branch" != "$DEFAULT_BRANCH" ]; then
+			echo -n "Use currently installed branch '$branch' instead of '$DEFAULT_BRANCH'? (Y/n) "
+			read response
+			case "$response" in
+				n*|N*)
+					# Do not switch branches
+					;;
+				*)
+					DEFAULT_BRANCH="$branch"
+					;;
+			esac
+		fi
+		echo -n "Upgrade Kohana $DEFAULT_BRANCH in $dir? (Y/n) "
+	else
+		echo -n "Install Kohana $DEFAULT_BRANCH to $dir? (Y/n) "
+	fi
 	read response
 	case "$response" in
 		n*|N*)
