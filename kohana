@@ -13,7 +13,7 @@ LOCAL_CONFIG="$HOME/.kohana.conf"
 #
 # Defaults
 #
-VERSION="0.3.0"
+VERSION="0.3.3"
 GITHUB="https://github.com"
 INSTALL_DIR="."
 MODULES=()
