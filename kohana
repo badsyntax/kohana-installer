@@ -159,15 +159,15 @@ install_application() {
 
 		if [ $DRY_RUN -eq 0 ]; then
 			# get index.php
-			curl --output index.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/index.php" > /dev/null 2>&1
+			curl --location --output index.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/index.php" > /dev/null 2>&1
 			check_exit_status "Failed to create skeleton: index.php" $ERROR_CURL
 
 			# get bootstrap.php
-			curl --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/application/bootstrap.php" > /dev/null 2>&1
+			curl --location --output application/bootstrap.php "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/application/bootstrap.php" > /dev/null 2>&1
 			check_exit_status "Failed to create skeleton: application/bootstrap.php" $ERROR_CURL
 
 			# get .htaccess
-			curl --output .htaccess "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/example.htaccess" > /dev/null 2>&1
+			curl --location --output .htaccess "$GITHUB/kohana/kohana/raw/$DEFAULT_BRANCH/example.htaccess" > /dev/null 2>&1
 			check_exit_status "Failed to create skeleton: .htaccess" $ERROR_CURL
 
 			# Stage skeleton
